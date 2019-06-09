@@ -1,0 +1,95 @@
+version: 2
+
+base_image: &base_image hashicorp/terraform:light
+
+working_directory: &working_directory ~/idc
+
+####################################################################################################
+# Steps
+####################################################################################################
+
+repo_cache_key: &repo_cache_key v1-repo-{{ .Branch }}-{{ .Revision }}
+
+restore_repo: &restore_repo
+  restore_cache:
+    key: *repo_cache_key
+
+save_repo: &save_repo
+  save_cache:
+    key: *repo_cache_key
+    paths:
+      - *working_directory
+
+terraform_init: &terraform_init
+  run:
+    name: terraform init
+    command: |
+      terraform init
+
+####################################################################################################
+# Jobs
+####################################################################################################
+
+default_config: &default_config
+  docker:
+    - image: *base_image
+  working_directory: *working_directory
+
+jobs:
+  build:
+    <<: *default_config
+    steps:
+      - checkout
+      - *save_repo
+
+  plan:
+    <<: *default_config
+    steps:
+      - *restore_repo
+      - *terraform_init
+      - run:
+          name: terraform plan
+          command: |
+            terraform plan -out=terraform.plan
+      - persist_to_workspace:
+          root: *working_directory
+          paths:
+            - terraform.plan
+
+  apply:
+    <<: *default_config
+    steps:
+      - *restore_repo
+      - *terraform_init
+      - attach_workspace:
+          at: *working_directory
+      - run:
+          name: terraform apply
+          command: |
+            terraform apply --auto-approve terraform.plan
+
+####################################################################################################
+# Workflows
+####################################################################################################
+
+workflows:
+  version: 2
+  build_plan_approve_apply:
+    jobs:
+      - build
+      - plan:
+          requires:
+            - build
+      - approve:
+          type: approval
+          requires:
+            - plan
+          filters:
+            branches:
+              only: master
+      - apply:
+          requires:
+            - approve
+          filters:
+            branches:
+              only: master
