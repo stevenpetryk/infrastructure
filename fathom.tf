@@ -53,3 +53,8 @@ resource "aws_autoscaling_group" "fathom" {
     "${aws_subnet.subnet_1b.id}",
   ]
 }
+
+resource "aws_s3_bucket" "bucket" {
+  bucket = "stevenpetryk-test-s3-bucket-1231228340928540293"
+  acl    = "private"
+}
